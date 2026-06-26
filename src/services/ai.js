@@ -67,6 +67,12 @@ async function generateResponse(intent, data, userMessage) {
       prompt = 'El usuario quiere consultar sus cuotas pendientes. Pedile su DNI para buscar su información.';
       break;
 
+    case 'pedir_dni_invalido':
+      prompt =
+        `El usuario mandó "${userMessage}" cuando el bot le estaba pidiendo su DNI. ` +
+        'Eso no parece un DNI válido. Pedile amigablemente que ingrese solo los números de su DNI (7 u 8 dígitos), sin puntos ni espacios.';
+      break;
+
     case 'stock':
       if (!data || !data.length) {
         prompt = 'No hay stock de indumentaria disponible en este momento. Informale de forma amigable.';

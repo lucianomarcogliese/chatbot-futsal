@@ -4,6 +4,7 @@ const { sendTextMessage } = require('./twilio');
 const { generateResponse } = require('./ai');
 
 const ERROR_MSG = 'Ocurrió un error, por favor intentá de nuevo en unos minutos.';
+const DNI_REGEX = /^\d{7,8}$/;
 
 const conversationState = {};
 
@@ -24,7 +25,7 @@ async function handleStock(from, userMessage) {
 
 async function handleCuotasConDNI(from, dni) {
   const resultado = await getCuotasPendientes(dni);
-  delete conversationState[from];
+  conversationState[from] = { lastDni: dni };
   const text = await generateResponse('cuotas', resultado, dni);
   return sendTextMessage(from, text);
 }
@@ -46,6 +47,11 @@ async function handleIncomingMessage(from, body) {
   try {
     if (conversationState[from]?.esperandoDNI) {
       const dni = body.trim();
+      if (!DNI_REGEX.test(dni)) {
+        console.log(`[botLogic] from=${from} estado=esperandoDNI input_invalido="${dni}"`);
+        const msg = await generateResponse('pedir_dni_invalido', null, body);
+        return sendTextMessage(from, msg);
+      }
       console.log(`[botLogic] from=${from} estado=esperandoDNI dni="${dni}"`);
       return await handleCuotasConDNI(from, dni);
     }
@@ -63,6 +69,10 @@ async function handleIncomingMessage(from, body) {
     if (intent === 'pago')     return await handlePago(from, body);
 
     if (intent === 'cuotas') {
+      if (conversationState[from]?.lastDni) {
+        console.log(`[botLogic] from=${from} re-usando lastDni="${conversationState[from].lastDni}"`);
+        return await handleCuotasConDNI(from, conversationState[from].lastDni);
+      }
       conversationState[from] = { esperandoDNI: true };
       const msg = await generateResponse('pedir_dni', null, body);
       return sendTextMessage(from, msg);
