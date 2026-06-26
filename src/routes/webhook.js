@@ -4,7 +4,7 @@ const { handleIncomingMessage } = require('../services/botLogic');
 
 // POST /webhook — punto de entrada de mensajes entrantes de Twilio
 router.post('/', (req, res) => {
-  res.sendStatus(200); // Twilio queda satisfecho de inmediato
+  res.status(200).end(); // Twilio queda satisfecho de inmediato (sin body para que no lo reenvíe)
 
   const from = req.body.From;
   const body = req.body.Body;
