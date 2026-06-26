@@ -143,6 +143,12 @@ async function generateResponse(intent, data, userMessage) {
         'Presentá la información de forma clara y amigable para WhatsApp.';
       break;
 
+    case 'cierre':
+      prompt =
+        `El usuario mandó: "${userMessage}". Es un acuse de recibo o cierre de conversación. ` +
+        'Respondé de forma corta y amigable (máximo 2 líneas). No repitas el menú de opciones.';
+      break;
+
     case 'no_entendido':
       prompt =
         `El usuario escribió: "${userMessage}" y el bot no entendió la consulta. ` +

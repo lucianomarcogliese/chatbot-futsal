@@ -14,6 +14,7 @@ function detectIntent(text) {
   if (/\b(c[oó]mo\s+(se\s+)?pag[ao]|pagar|abonar|transferencia|cbu|alias|efectivo|secretar[ií]a|medio[s]?\s+de\s+pago|forma[s]?\s+de\s+pago)\b/.test(text)) return 'pago';
   if (/\b(cuota|cuotas|deb[eo]|deuda|pago|estado|adeud)\b/.test(text)) return 'cuotas';
   if (/\b(partido|partidos|juego|jugamos|fixture)\b/.test(text)) return 'partidos';
+  if (/\b(ok|okay|perfecto|gracias|dale|genial|buen[ií]simo|b[áa]rbaro|copado|re\s+copado|entendido|listo|joya|todo\s+bien|ten[eé]s\s+raz[oó]n|exacto|claro|s[íi])\b/.test(text)) return 'cierre';
   return 'desconocido';
 }
 
@@ -67,6 +68,11 @@ async function handleIncomingMessage(from, body) {
     if (intent === 'stock')    return await handleStock(from, body);
     if (intent === 'partidos') return await handlePartidos(from, body);
     if (intent === 'pago')     return await handlePago(from, body);
+
+    if (intent === 'cierre') {
+      const msg = await generateResponse('cierre', null, body);
+      return sendTextMessage(from, msg);
+    }
 
     if (intent === 'cuotas') {
       if (conversationState[from]?.lastDni) {
