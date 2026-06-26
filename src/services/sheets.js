@@ -58,7 +58,7 @@ async function readSheet(tab, range) {
 
   const [headers, ...dataRows] = rows;
   const result = dataRows.map((row) =>
-    Object.fromEntries(headers.map((h, i) => [h, row[i] ?? '']))
+    Object.fromEntries(headers.map((h, i) => [h.trim(), row[i] ?? '']))
   );
 
   toCache(cacheKey, result);
@@ -80,7 +80,7 @@ async function getStock() {
         producto: r.Producto,
         talle: r.Talle,
         cantidad: parseInt(r.Cantidad, 10),
-        precio: r.Precio,
+        precio: String(r.Precio || '').replace(/^\$\s*/, '').trim(),
         imagenUrl: r.ImagenUrl || '',
       }));
   } catch (err) {
