@@ -74,17 +74,25 @@ async function generateResponse(intent, data, userMessage) {
       break;
 
     case 'stock':
-      if (!data || !data.length) {
-        prompt = 'No hay stock de indumentaria disponible en este momento. Informale de forma amigable.';
-      } else {
-        const lista = data
-          .map((i) => `${i.producto} — Talle ${i.talle} — ${i.cantidad} unidades — $${i.precio}`)
-          .join('\n');
-        prompt =
-          `El usuario consultó el stock de indumentaria. El stock disponible es:\n${lista}\n\n` +
-          'Presentá esta información de forma clara y atractiva para WhatsApp.';
-      }
+      prompt = 'No hay stock de indumentaria disponible en este momento. Informale de forma amigable.';
       break;
+
+    case 'stock_lista': {
+      const lista = data.map((p) => `${p.numero}. ${p.nombre}`).join('\n');
+      prompt =
+        `El usuario preguntó por stock de indumentaria. Los productos disponibles son:\n${lista}\n\n` +
+        'Presentá el listado numerado de forma atractiva y pedile que responda con el número del producto que quiere ver.';
+      break;
+    }
+
+    case 'stock_no_encontrado': {
+      const opciones = data.map((p) => `${p.numero}. ${p.nombre}`).join('\n');
+      prompt =
+        `El usuario respondió "${userMessage}" pero no coincide con ningún producto del catálogo.\n` +
+        `Los productos disponibles son:\n${opciones}\n\n` +
+        'Avisale amigablemente que no entendiste y pedile que elija un número de la lista.';
+      break;
+    }
 
     case 'cuotas':
       if (!data.encontrado) {

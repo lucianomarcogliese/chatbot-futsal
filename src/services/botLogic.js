@@ -26,7 +26,7 @@ async function handleStock(from, userMessage) {
     return sendTextMessage(from, text);
   }
 
-  // Agrupar filas por producto; tomar la primera imagenUrl no vacía del grupo
+  // Agrupar por producto
   const porProducto = new Map();
   for (const item of items) {
     if (!porProducto.has(item.producto)) {
@@ -37,23 +37,51 @@ async function handleStock(from, userMessage) {
     entry.talles.push({ talle: item.talle, cantidad: item.cantidad, precio: item.precio });
   }
 
-  const sinImagen = [];
-  for (const [producto, data] of porProducto.entries()) {
-    const lineas = data.talles
-      .map((t) => `• Talle ${t.talle} — ${t.cantidad} uds — $${t.precio}`)
-      .join('\n');
-    const caption = `👕 *${producto}*\n${lineas}`;
+  const catalogo = [...porProducto.entries()].map(([nombre, data], i) => ({
+    numero: i + 1,
+    nombre,
+    imagenUrl: data.imagenUrl,
+    talles: data.talles,
+  }));
 
-    if (data.imagenUrl) {
-      await sendMediaMessage(from, data.imagenUrl, caption);
-    } else {
-      sinImagen.push(caption);
-    }
+  // Guardar estado esperando selección de producto
+  conversationState[from] = { ...conversationState[from], esperandoProducto: true, catalogo };
+
+  const text = await generateResponse('stock_lista', catalogo, userMessage);
+  return sendTextMessage(from, text);
+}
+
+async function handleProductoSeleccionado(from, input) {
+  const { catalogo } = conversationState[from];
+
+  // Match por número
+  const numero = parseInt(input.trim(), 10);
+  let producto = !isNaN(numero) ? catalogo.find((p) => p.numero === numero) : null;
+
+  // Match por nombre parcial
+  if (!producto) {
+    const lower = input.trim().toLowerCase();
+    producto = catalogo.find((p) => p.nombre.toLowerCase().includes(lower));
   }
 
-  if (sinImagen.length) {
-    await sendTextMessage(from, `📦 *Stock disponible:*\n\n${sinImagen.join('\n\n')}`);
+  if (!producto) {
+    const msg = await generateResponse('stock_no_encontrado', catalogo, input);
+    return sendTextMessage(from, msg);
   }
+
+  // Limpiar estado preservando lastDni si existe
+  const { lastDni } = conversationState[from];
+  conversationState[from] = lastDni ? { lastDni } : {};
+
+  const lineas = producto.talles
+    .map((t) => `• Talle ${t.talle} — ${t.cantidad} uds — $${t.precio}`)
+    .join('\n');
+  const caption = `👕 *${producto.nombre}*\n${lineas}`;
+
+  if (producto.imagenUrl) {
+    return sendMediaMessage(from, producto.imagenUrl, caption);
+  }
+  return sendTextMessage(from, caption);
 }
 
 async function handleCuotasConDNI(from, dni) {
@@ -96,6 +124,11 @@ async function handleIncomingMessage(from, body) {
   const text = body.trim().toLowerCase();
 
   try {
+    if (conversationState[from]?.esperandoProducto) {
+      console.log(`[botLogic] from=${from} estado=esperandoProducto input="${body}"`);
+      return await handleProductoSeleccionado(from, body);
+    }
+
     if (conversationState[from]?.esperandoDNI) {
       const dni = body.trim();
       if (!DNI_REGEX.test(dni)) {
