@@ -58,7 +58,8 @@ async function generateResponse(intent, data, userMessage) {
         'Saludalo y presentá el menú de opciones del bot: ' +
         '(1) consulta de cuotas sociales y de futsal, ' +
         '(2) stock de indumentaria (camisetas, talles), ' +
-        '(3) próximos partidos. ' +
+        '(3) próximos partidos, ' +
+        '(4) cómo pagar las cuotas. ' +
         'Mencioná brevemente cómo puede consultar cada tema.';
       break;
 
@@ -125,6 +126,15 @@ async function generateResponse(intent, data, userMessage) {
           `El usuario consultó los próximos partidos. Los partidos programados son:\n${lista}\n\n` +
           'Presentá esta información de forma atractiva para WhatsApp con emojis y los datos bien claros.';
       }
+      break;
+
+    case 'pago':
+      prompt =
+        'El usuario quiere saber cómo pagar las cuotas del club. ' +
+        'Explicale que tiene dos opciones:\n' +
+        '1. En efectivo en la secretaría del club, de lunes a viernes de 8:30 a 14:00 hs o de 16:30 a 20:30 hs.\n' +
+        '2. Por transferencia bancaria al CBU: 123123123123.\n' +
+        'Presentá la información de forma clara y amigable para WhatsApp.';
       break;
 
     case 'no_entendido':

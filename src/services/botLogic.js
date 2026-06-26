@@ -10,6 +10,7 @@ const conversationState = {};
 function detectIntent(text) {
   if (/\b(hola|buenas|buen\s?d[ií]a|buenas\s?tardes|buenas\s?noches|hey|saludos)\b/.test(text)) return 'saludo';
   if (/\b(stock|ropa|camiseta|talle|indumentaria)\b/.test(text)) return 'stock';
+  if (/\b(c[oó]mo\s+(se\s+)?pag[ao]|pagar|abonar|transferencia|cbu|alias|efectivo|secretar[ií]a|medio[s]?\s+de\s+pago|forma[s]?\s+de\s+pago)\b/.test(text)) return 'pago';
   if (/\b(cuota|cuotas|deb[eo]|deuda|pago|estado|adeud)\b/.test(text)) return 'cuotas';
   if (/\b(partido|partidos|juego|jugamos|fixture)\b/.test(text)) return 'partidos';
   return 'desconocido';
@@ -34,6 +35,11 @@ async function handlePartidos(from, userMessage) {
   return sendTextMessage(from, text);
 }
 
+async function handlePago(from, userMessage) {
+  const text = await generateResponse('pago', null, userMessage);
+  return sendTextMessage(from, text);
+}
+
 async function handleIncomingMessage(from, body) {
   const text = body.trim().toLowerCase();
 
@@ -54,6 +60,7 @@ async function handleIncomingMessage(from, body) {
 
     if (intent === 'stock')    return await handleStock(from, body);
     if (intent === 'partidos') return await handlePartidos(from, body);
+    if (intent === 'pago')     return await handlePago(from, body);
 
     if (intent === 'cuotas') {
       conversationState[from] = { esperandoDNI: true };
