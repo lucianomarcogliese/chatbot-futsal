@@ -121,16 +121,18 @@ async function generateResponse(intent, data, userMessage) {
       if (!data || !data.length) {
         prompt = 'No hay partidos programados en este momento. Informale al usuario de forma amigable.';
       } else {
-        const lista = data
-          .map(
-            (p) =>
-              `VS ${p.rival} | ${p.fecha} | ${p.hora} | ${p.lugar}` +
-              (p.categoria ? ` | ${p.categoria}` : '')
-          )
-          .join('\n');
+        const jornadasTexto = data
+          .map((j) => {
+            const cats = j.categorias
+              .map((c) => `    • ${c.categoria}: ${c.hora} hs`)
+              .join('\n');
+            return `Jornada: ${j.fecha} VS ${j.rival} | ${j.lugar}\nCategorías:\n${cats}`;
+          })
+          .join('\n\n');
         prompt =
-          `El usuario consultó los próximos partidos. Los partidos programados son:\n${lista}\n\n` +
-          'Presentá esta información de forma atractiva para WhatsApp con emojis y los datos bien claros.';
+          `El usuario consultó los próximos partidos. Las jornadas programadas son:\n\n${jornadasTexto}\n\n` +
+          'Presentá cada jornada agrupada: fecha y rival una sola vez arriba, y cada categoría ' +
+          'con su horario en lista debajo. Usá emojis y formato claro para WhatsApp.';
       }
       break;
 

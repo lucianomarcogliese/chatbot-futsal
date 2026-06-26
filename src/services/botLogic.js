@@ -31,9 +31,27 @@ async function handleCuotasConDNI(from, dni) {
   return sendTextMessage(from, text);
 }
 
+function groupByJornada(partidos, maxJornadas = 3) {
+  const map = new Map();
+  for (const p of partidos) {
+    const key = `${p.fecha}||${p.rival}`;
+    if (!map.has(key)) {
+      map.set(key, { fecha: p.fecha, rival: p.rival, lugar: p.lugar, categorias: [] });
+    }
+    map.get(key).categorias.push({ categoria: p.categoria, hora: p.hora });
+  }
+  return [...map.values()]
+    .slice(0, maxJornadas)
+    .map((j) => ({
+      ...j,
+      categorias: j.categorias.sort((a, b) => (a.hora > b.hora ? 1 : -1)),
+    }));
+}
+
 async function handlePartidos(from, userMessage) {
-  const partidos = await getProximosPartidos(3);
-  const text = await generateResponse('partidos', partidos, userMessage);
+  const partidos = await getProximosPartidos(50);
+  const jornadas = groupByJornada(partidos, 3);
+  const text = await generateResponse('partidos', jornadas, userMessage);
   return sendTextMessage(from, text);
 }
 
