@@ -8,10 +8,11 @@ function getClient() {
 }
 
 const MENU_TEXT =
-  'Hola 👋 Puedo ayudarte con:\n\n' +
-  '• Estado de tus cuotas\n' +
-  '• Stock de indumentaria\n' +
-  '• Próximos partidos\n\n' +
+  'No entendí tu consulta 🤔 ¿Podés escribirlo de otra manera?\n\n' +
+  'Puedo ayudarte con:\n\n' +
+  '• *Cuotas* — escribí algo como "cuánto debo" o "mis cuotas"\n' +
+  '• *Indumentaria* — escribí algo como "stock" o "ropa"\n' +
+  '• *Partidos* — escribí algo como "próximos partidos" o "fixture"\n\n' +
   '¿Sobre qué querés consultar?';
 
 async function sendTextMessage(to, body) {
