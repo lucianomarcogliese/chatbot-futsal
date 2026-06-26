@@ -1,14 +1,11 @@
+'use strict';
 const { getStock, getCuotasPendientes, getProximosPartidos } = require('./sheets');
-const { sendTextMessage, sendMenuMessage, sendNotUnderstoodMessage } = require('./twilio');
+const { sendTextMessage } = require('./twilio');
+const { generateResponse } = require('./ai');
 
-const ERROR_MSG =
-  'Ocurrió un error, por favor intentá de nuevo en unos minutos.';
+const ERROR_MSG = 'Ocurrió un error, por favor intentá de nuevo en unos minutos.';
 
-// ─── Estado de conversación ───────────────────────────────────────────────────
-// Clave: `from` (whatsapp:+549...), valor: { esperandoDNI: true }
 const conversationState = {};
-
-// ─── Detección de intención ───────────────────────────────────────────────────
 
 function detectIntent(text) {
   if (/\b(hola|buenas|buen\s?d[ií]a|buenas\s?tardes|buenas\s?noches|hey|saludos)\b/.test(text)) return 'saludo';
@@ -18,79 +15,29 @@ function detectIntent(text) {
   return 'desconocido';
 }
 
-// ─── Handlers ─────────────────────────────────────────────────────────────────
-
-async function handleStock(from) {
+async function handleStock(from, userMessage) {
   const items = await getStock();
-
-  if (!items.length) {
-    return sendTextMessage(from, 'Por el momento no hay stock disponible.');
-  }
-
-  const lineas = items.map(
-    (i) => `👕 *${i.producto}* - Talle ${i.talle} - ${i.cantidad} unidades - $${i.precio}`
-  );
-  return sendTextMessage(from, `📦 *Stock disponible:*\n\n${lineas.join('\n')}`);
+  const text = await generateResponse('stock', items, userMessage);
+  return sendTextMessage(from, text);
 }
 
 async function handleCuotasConDNI(from, dni) {
   const resultado = await getCuotasPendientes(dni);
   delete conversationState[from];
-
-  if (!resultado.encontrado) {
-    return sendTextMessage(
-      from,
-      'No encontré ese DNI en el sistema. Verificá el número o hablá con el administrador.'
-    );
-  }
-
-  if (!resultado.cuotas.length) {
-    return sendTextMessage(from, `✅ ¡${resultado.nombre} está al día con todas sus cuotas!`);
-  }
-
-  const ICONOS = { Social: '🏛️', Futsal: '⚽', Otra: '📋' };
-
-  const porTipo = resultado.cuotas.reduce((acc, c) => {
-    const tipo = c.tipo || 'Otra';
-    if (!acc[tipo]) acc[tipo] = [];
-    acc[tipo].push(c);
-    return acc;
-  }, {});
-
-  const secciones = Object.entries(porTipo).map(([tipo, cuotas]) => {
-    const icono = ICONOS[tipo] || '📋';
-    const lineas = cuotas.map((c) => `  • ${c.mes}: $${c.monto.toLocaleString('es-AR')}`);
-    return `${icono} *Cuota ${tipo}:*\n${lineas.join('\n')}`;
-  });
-
-  const resumen =
-    `💳 *Cuotas pendientes de ${resultado.nombre}:*\n\n` +
-    secciones.join('\n\n') +
-    `\n\n*Total adeudado: $${resultado.totalMonto.toLocaleString('es-AR')}*`;
-
-  return sendTextMessage(from, resumen);
+  const text = await generateResponse('cuotas', resultado, dni);
+  return sendTextMessage(from, text);
 }
 
-async function handlePartidos(from) {
+async function handlePartidos(from, userMessage) {
   const partidos = await getProximosPartidos(3);
-
-  if (!partidos.length) {
-    return sendTextMessage(from, 'No hay partidos programados por el momento.');
-  }
-
-  const lineas = partidos.map(
-    (p) => `⚽ VS ${p.rival} | 📅 ${p.fecha} | 🕐 ${p.hora} | 📍 ${p.lugar}${p.categoria ? ` | ${p.categoria}` : ''}`
-  );
-  return sendTextMessage(from, `🗓️ *Próximos partidos:*\n\n${lineas.join('\n')}`);
+  const text = await generateResponse('partidos', partidos, userMessage);
+  return sendTextMessage(from, text);
 }
-
-// ─── Función principal ────────────────────────────────────────────────────────
 
 async function handleIncomingMessage(from, body) {
   const text = body.trim().toLowerCase();
 
   try {
-    // Si estamos esperando el DNI de este usuario, procesarlo directamente
     if (conversationState[from]?.esperandoDNI) {
       const dni = body.trim();
       console.log(`[botLogic] from=${from} estado=esperandoDNI dni="${dni}"`);
@@ -100,16 +47,22 @@ async function handleIncomingMessage(from, body) {
     const intent = detectIntent(text);
     console.log(`[botLogic] from=${from} intent=${intent} body="${body}"`);
 
-    if (intent === 'saludo')  return await sendMenuMessage(from);
-    if (intent === 'stock')   return await handleStock(from);
-    if (intent === 'partidos') return await handlePartidos(from);
+    if (intent === 'saludo') {
+      const msg = await generateResponse('menu', null, body);
+      return sendTextMessage(from, msg);
+    }
+
+    if (intent === 'stock')    return await handleStock(from, body);
+    if (intent === 'partidos') return await handlePartidos(from, body);
 
     if (intent === 'cuotas') {
       conversationState[from] = { esperandoDNI: true };
-      return await sendTextMessage(from, '¿Cuál es tu DNI?');
+      const msg = await generateResponse('pedir_dni', null, body);
+      return sendTextMessage(from, msg);
     }
 
-    return await sendNotUnderstoodMessage(from);
+    const msg = await generateResponse('no_entendido', null, body);
+    return sendTextMessage(from, msg);
   } catch (err) {
     console.error('[botLogic] Error no controlado:', err.message);
     delete conversationState[from];
