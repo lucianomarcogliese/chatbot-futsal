@@ -1,5 +1,5 @@
 const { getStock, getCuotasPendientes, getProximosPartidos } = require('./sheets');
-const { sendTextMessage, sendMenuMessage } = require('./twilio');
+const { sendTextMessage, sendMenuMessage, sendNotUnderstoodMessage } = require('./twilio');
 
 const ERROR_MSG =
   'Ocurrió un error, por favor intentá de nuevo en unos minutos.';
@@ -11,10 +11,11 @@ const conversationState = {};
 // ─── Detección de intención ───────────────────────────────────────────────────
 
 function detectIntent(text) {
+  if (/\b(hola|buenas|buen\s?d[ií]a|buenas\s?tardes|buenas\s?noches|hey|saludos)\b/.test(text)) return 'saludo';
   if (/\b(stock|ropa|camiseta|talle|indumentaria)\b/.test(text)) return 'stock';
   if (/\b(cuota|cuotas|deb[eo]|deuda|pago|estado|adeud)\b/.test(text)) return 'cuotas';
   if (/\b(partido|partidos|juego|jugamos|fixture)\b/.test(text)) return 'partidos';
-  return 'menu';
+  return 'desconocido';
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -99,16 +100,16 @@ async function handleIncomingMessage(from, body) {
     const intent = detectIntent(text);
     console.log(`[botLogic] from=${from} intent=${intent} body="${body}"`);
 
-    if (intent === 'stock') return await handleStock(from);
+    if (intent === 'saludo')  return await sendMenuMessage(from);
+    if (intent === 'stock')   return await handleStock(from);
+    if (intent === 'partidos') return await handlePartidos(from);
 
     if (intent === 'cuotas') {
       conversationState[from] = { esperandoDNI: true };
       return await sendTextMessage(from, '¿Cuál es tu DNI?');
     }
 
-    if (intent === 'partidos') return await handlePartidos(from);
-
-    return await sendMenuMessage(from);
+    return await sendNotUnderstoodMessage(from);
   } catch (err) {
     console.error('[botLogic] Error no controlado:', err.message);
     delete conversationState[from];

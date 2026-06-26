@@ -8,6 +8,13 @@ function getClient() {
 }
 
 const MENU_TEXT =
+  'Hola 👋 Puedo ayudarte con:\n\n' +
+  '• Estado de tus cuotas\n' +
+  '• Stock de indumentaria\n' +
+  '• Próximos partidos\n\n' +
+  '¿Sobre qué querés consultar?';
+
+const NOT_UNDERSTOOD_TEXT =
   'No entendí tu consulta 🤔 ¿Podés escribirlo de otra manera?\n\n' +
   'Puedo ayudarte con:\n\n' +
   '• *Cuotas* — escribí algo como "cuánto debo" o "mis cuotas"\n' +
@@ -34,4 +41,8 @@ async function sendMenuMessage(to) {
   return sendTextMessage(to, MENU_TEXT);
 }
 
-module.exports = { sendTextMessage, sendMenuMessage };
+async function sendNotUnderstoodMessage(to) {
+  return sendTextMessage(to, NOT_UNDERSTOOD_TEXT);
+}
+
+module.exports = { sendTextMessage, sendMenuMessage, sendNotUnderstoodMessage };
