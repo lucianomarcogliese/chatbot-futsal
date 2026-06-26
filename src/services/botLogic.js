@@ -78,7 +78,7 @@ async function handlePartidos(from) {
   }
 
   const lineas = partidos.map(
-    (p) => `⚽ *${p.rival}* | 📅 ${p.fecha} | 🕐 ${p.hora} | 📍 ${p.lugar}${p.categoria ? ` | ${p.categoria}` : ''}`
+    (p) => `⚽ VS ${p.rival} | 📅 ${p.fecha} | 🕐 ${p.hora} | 📍 ${p.lugar}${p.categoria ? ` | ${p.categoria}` : ''}`
   );
   return sendTextMessage(from, `🗓️ *Próximos partidos:*\n\n${lineas.join('\n')}`);
 }
