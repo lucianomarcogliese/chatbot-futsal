@@ -12,7 +12,7 @@ const conversationState = {};
 
 function detectIntent(text) {
   if (/\b(stock|ropa|camiseta|talle|indumentaria)\b/.test(text)) return 'stock';
-  if (/\b(cuota|cuotas|debe|deuda|pago|estado)\b/.test(text))    return 'cuotas';
+  if (/\b(cuota|cuotas|deb[eo]|deuda|pago|estado|adeud)\b/.test(text)) return 'cuotas';
   if (/\b(partido|partidos|juego|jugamos|fixture)\b/.test(text)) return 'partidos';
   return 'menu';
 }
