@@ -73,7 +73,7 @@ async function readSheet(tab, range) {
  */
 async function getStock() {
   try {
-    const rows = await readSheet('Stock', 'A:D');
+    const rows = await readSheet('Stock', 'A:E');
     return rows
       .filter((r) => parseInt(r.Cantidad, 10) > 0)
       .map((r) => ({
@@ -81,6 +81,7 @@ async function getStock() {
         talle: r.Talle,
         cantidad: parseInt(r.Cantidad, 10),
         precio: r.Precio,
+        imagenUrl: r.ImagenUrl || '',
       }));
   } catch (err) {
     console.error('[sheets] Error en getStock:', err.message);

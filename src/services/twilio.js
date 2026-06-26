@@ -37,6 +37,22 @@ async function sendTextMessage(to, body) {
   }
 }
 
+async function sendMediaMessage(to, mediaUrl, body) {
+  try {
+    const message = await getClient().messages.create({
+      from: process.env.TWILIO_WHATSAPP_FROM,
+      to,
+      body,
+      mediaUrl: [mediaUrl],
+    });
+    console.log(`[twilio] Media enviada a ${to} — SID: ${message.sid}`);
+    return message;
+  } catch (err) {
+    console.error('[twilio] Error en sendMediaMessage:', err.message);
+    throw err;
+  }
+}
+
 async function sendMenuMessage(to) {
   return sendTextMessage(to, MENU_TEXT);
 }
@@ -45,4 +61,4 @@ async function sendNotUnderstoodMessage(to) {
   return sendTextMessage(to, NOT_UNDERSTOOD_TEXT);
 }
 
-module.exports = { sendTextMessage, sendMenuMessage, sendNotUnderstoodMessage };
+module.exports = { sendTextMessage, sendMediaMessage, sendMenuMessage, sendNotUnderstoodMessage };

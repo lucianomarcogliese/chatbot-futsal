@@ -1,6 +1,6 @@
 'use strict';
 const { getStock, getCuotasPendientes, getProximosPartidos } = require('./sheets');
-const { sendTextMessage } = require('./twilio');
+const { sendTextMessage, sendMediaMessage } = require('./twilio');
 const { generateResponse } = require('./ai');
 
 const ERROR_MSG = 'Ocurrió un error, por favor intentá de nuevo en unos minutos.';
@@ -20,8 +20,40 @@ function detectIntent(text) {
 
 async function handleStock(from, userMessage) {
   const items = await getStock();
-  const text = await generateResponse('stock', items, userMessage);
-  return sendTextMessage(from, text);
+
+  if (!items.length) {
+    const text = await generateResponse('stock', [], userMessage);
+    return sendTextMessage(from, text);
+  }
+
+  // Agrupar filas por producto; tomar la primera imagenUrl no vacía del grupo
+  const porProducto = new Map();
+  for (const item of items) {
+    if (!porProducto.has(item.producto)) {
+      porProducto.set(item.producto, { imagenUrl: '', talles: [] });
+    }
+    const entry = porProducto.get(item.producto);
+    if (!entry.imagenUrl && item.imagenUrl) entry.imagenUrl = item.imagenUrl;
+    entry.talles.push({ talle: item.talle, cantidad: item.cantidad, precio: item.precio });
+  }
+
+  const sinImagen = [];
+  for (const [producto, data] of porProducto.entries()) {
+    const lineas = data.talles
+      .map((t) => `• Talle ${t.talle} — ${t.cantidad} uds — $${t.precio}`)
+      .join('\n');
+    const caption = `👕 *${producto}*\n${lineas}`;
+
+    if (data.imagenUrl) {
+      await sendMediaMessage(from, data.imagenUrl, caption);
+    } else {
+      sinImagen.push(caption);
+    }
+  }
+
+  if (sinImagen.length) {
+    await sendTextMessage(from, `📦 *Stock disponible:*\n\n${sinImagen.join('\n\n')}`);
+  }
 }
 
 async function handleCuotasConDNI(from, dni) {
