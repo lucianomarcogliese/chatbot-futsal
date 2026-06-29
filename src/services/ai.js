@@ -144,6 +144,15 @@ async function generateResponse(intent, data, userMessage) {
       }
       break;
 
+    case 'valor_cuotas':
+      prompt =
+        'El usuario quiere saber cuánto cuestan las cuotas del club. Los valores vigentes son:\n' +
+        '- Cuota Social Menor: $15.000\n' +
+        '- Cuota Social Mayor: $18.000\n' +
+        '- Cuota Futsal: $35.000\n\n' +
+        'Informale de forma clara y amigable para WhatsApp.';
+      break;
+
     case 'pago':
       prompt =
         'El usuario quiere saber cómo pagar las cuotas del club. ' +
