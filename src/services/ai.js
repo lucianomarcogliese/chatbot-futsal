@@ -5,7 +5,10 @@ const SYSTEM_PROMPT =
   'Sos el asistente de WhatsApp de un club de fútbol sala (futsal). ' +
   'Respondés siempre en español rioplatense (Argentina): tuteo, "querés", "podés", "tenés". ' +
   'Usás emojis con moderación y formateás para WhatsApp usando *negrita* con asteriscos. ' +
-  'Sos amigable, conciso y claro. Nunca inventás datos: solo usás la información que te proveen.';
+  'Sos amigable, conciso y claro. Nunca inventás datos: solo usás la información que te proveen. ' +
+  'Hablás de forma NATURAL y conversacional, como lo haría una persona real. ' +
+  'Nunca das instrucciones tipo "escribí X para consultar Y". ' +
+  'En vez de listar comandos, contás lo que podés hacer y preguntás qué le interesa.';
 
 function callClaude(prompt) {
   return new Promise((resolve, reject) => {
@@ -55,12 +58,12 @@ async function generateResponse(intent, data, userMessage) {
     case 'menu':
       prompt =
         `El usuario mandó: "${userMessage}". ` +
-        'Saludalo y presentá el menú de opciones del bot: ' +
-        '(1) consulta de cuotas sociales y de futsal, ' +
-        '(2) stock de indumentaria (camisetas, talles), ' +
-        '(3) próximos partidos, ' +
-        '(4) cómo pagar las cuotas. ' +
-        'Mencioná brevemente cómo puede consultar cada tema.';
+        'Saludalo de forma natural y contale brevemente que podés ayudarlo con ' +
+        'sus cuotas del club, el stock de indumentaria, los próximos partidos ' +
+        'y las formas de pago. ' +
+        'No listes comandos ni digas cómo escribir cada consulta. ' +
+        'Presentate como si fueras un colaborador del club charlando por WhatsApp. ' +
+        'Terminá con una pregunta natural sobre qué necesita.';
       break;
 
     case 'pedir_dni':
@@ -81,7 +84,9 @@ async function generateResponse(intent, data, userMessage) {
       const lista = data.map((p) => `${p.numero}. ${p.nombre}`).join('\n');
       prompt =
         `El usuario preguntó por stock de indumentaria. Los productos disponibles son:\n${lista}\n\n` +
-        'Presentá el listado numerado de forma atractiva y pedile que responda con el número del producto que quiere ver.';
+        'Presentá el listado de forma atractiva y preguntale de forma natural cuál le interesa. ' +
+        'No des instrucciones de comandos. Algo como "¿alguno te llama la atención?" ' +
+        'o "decime cuál querés ver y te mando los detalles".';
       break;
     }
 
