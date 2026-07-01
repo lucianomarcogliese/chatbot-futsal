@@ -71,6 +71,15 @@ async function readSheet(tab, range) {
  * Devuelve productos con Cantidad > 0.
  * [{ producto, talle, cantidad, precio }]
  */
+function normalizarUrlImagen(url) {
+  if (!url) return '';
+  const matchFile = url.match(/\/file\/d\/([^/?]+)/);
+  if (matchFile) return `https://drive.google.com/uc?export=view&id=${matchFile[1]}`;
+  const matchId = url.match(/[?&]id=([^&]+)/);
+  if (matchId) return `https://drive.google.com/uc?export=view&id=${matchId[1]}`;
+  return url;
+}
+
 async function getStock() {
   try {
     const rows = await readSheet('Stock', 'A:E');
@@ -81,7 +90,7 @@ async function getStock() {
         talle: r.Talle,
         cantidad: parseInt(r.Cantidad, 10),
         precio: String(r.Precio || '').replace(/^\$\s*/, '').trim(),
-        imagenUrl: r.ImagenUrl || '',
+        imagenUrl: normalizarUrlImagen(r.ImagenUrl),
       }));
   } catch (err) {
     console.error('[sheets] Error en getStock:', err.message);
