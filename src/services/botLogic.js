@@ -78,13 +78,21 @@ async function handleProductoSeleccionado(from, input) {
   }
 
   if (!producto) {
+    // Si el usuario cambió de tema, salir del modo stock y dispatch al intent correcto
+    const intent = detectIntent(input.trim().toLowerCase());
+    if (intent !== 'desconocido') {
+      const { lastDni } = conversationState[from];
+      conversationState[from] = lastDni ? { lastDni } : {};
+      return await dispatchIntent(from, intent, input);
+    }
+    // Sin match → seguir en modo stock y pedir que reintente
     const msg = await generateResponse('stock_no_encontrado', catalogo, input);
     return sendTextMessage(from, msg);
   }
 
-  // Limpiar estado preservando lastDni si existe
+  // Mantener estado de stock activo para follow-up questions
   const { lastDni } = conversationState[from];
-  conversationState[from] = lastDni ? { lastDni } : {};
+  conversationState[from] = { esperandoProducto: true, catalogo, ...(lastDni ? { lastDni } : {}) };
 
   const lineas = producto.talles
     .map((t) => `• Talle ${t.talle} — ${t.cantidad} uds — $${t.precio}`)
@@ -133,6 +141,35 @@ async function handlePago(from, userMessage) {
   return sendTextMessage(from, text);
 }
 
+async function dispatchIntent(from, intent, body) {
+  if (intent === 'saludo') {
+    const msg = await generateResponse('menu', null, body);
+    return sendTextMessage(from, msg);
+  }
+  if (intent === 'stock')        return await handleStock(from, body);
+  if (intent === 'partidos')     return await handlePartidos(from, body);
+  if (intent === 'pago')         return await handlePago(from, body);
+  if (intent === 'valor_cuotas') {
+    const msg = await generateResponse('valor_cuotas', null, body);
+    return sendTextMessage(from, msg);
+  }
+  if (intent === 'cierre') {
+    const msg = await generateResponse('cierre', null, body);
+    return sendTextMessage(from, msg);
+  }
+  if (intent === 'cuotas') {
+    if (conversationState[from]?.lastDni) {
+      console.log(`[botLogic] from=${from} re-usando lastDni="${conversationState[from].lastDni}"`);
+      return await handleCuotasConDNI(from, conversationState[from].lastDni);
+    }
+    conversationState[from] = { esperandoDNI: true };
+    const msg = await generateResponse('pedir_dni', null, body);
+    return sendTextMessage(from, msg);
+  }
+  const msg = await generateResponse('no_entendido', null, body);
+  return sendTextMessage(from, msg);
+}
+
 async function handleIncomingMessage(from, body) {
   const text = body.trim().toLowerCase();
 
@@ -156,36 +193,7 @@ async function handleIncomingMessage(from, body) {
     const intent = detectIntent(text);
     console.log(`[botLogic] from=${from} intent=${intent} body="${body}"`);
 
-    if (intent === 'saludo') {
-      const msg = await generateResponse('menu', null, body);
-      return sendTextMessage(from, msg);
-    }
-
-    if (intent === 'stock')        return await handleStock(from, body);
-    if (intent === 'partidos')    return await handlePartidos(from, body);
-    if (intent === 'pago')        return await handlePago(from, body);
-    if (intent === 'valor_cuotas') {
-      const msg = await generateResponse('valor_cuotas', null, body);
-      return sendTextMessage(from, msg);
-    }
-
-    if (intent === 'cierre') {
-      const msg = await generateResponse('cierre', null, body);
-      return sendTextMessage(from, msg);
-    }
-
-    if (intent === 'cuotas') {
-      if (conversationState[from]?.lastDni) {
-        console.log(`[botLogic] from=${from} re-usando lastDni="${conversationState[from].lastDni}"`);
-        return await handleCuotasConDNI(from, conversationState[from].lastDni);
-      }
-      conversationState[from] = { esperandoDNI: true };
-      const msg = await generateResponse('pedir_dni', null, body);
-      return sendTextMessage(from, msg);
-    }
-
-    const msg = await generateResponse('no_entendido', null, body);
-    return sendTextMessage(from, msg);
+    return await dispatchIntent(from, intent, body);
   } catch (err) {
     console.error('[botLogic] Error no controlado:', err.message);
     delete conversationState[from];
