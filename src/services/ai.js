@@ -283,14 +283,18 @@ async function generateResponse(intent, data, userMessage) {
         'Pedile amigablemente que ingrese su número de celular con código de área (ej: 11 XXXX-XXXX).';
       break;
 
-    case 'reserva_instrucciones_pago':
+    case 'reserva_instrucciones_pago': {
+      const precioInfo = data.talles && data.talles.length
+        ? '\nPrecios por talle:\n' + data.talles.map((t) => `• Talle ${t.talle}: $${t.precio}`).join('\n')
+        : '';
       prompt =
-        `El usuario ${data.nombre} reservó el producto "${data.producto}". La reserva quedó registrada. ` +
-        'Explicale las opciones de pago:\n' +
+        `El usuario ${data.nombre} reservó el producto "${data.producto}".${precioInfo}\n` +
+        'La reserva quedó registrada. Explicale las opciones de pago incluyendo el precio:\n' +
         '1. Transferencia bancaria al alias *VILTER.2026* — pedile que mande el comprobante por acá cuando esté.\n' +
         '2. En efectivo, comunicándose al *1130350702* para coordinar.\n' +
         'Para el retiro del producto también puede comunicarse a ese número. Sé amigable y transmití entusiasmo.';
       break;
+    }
 
     case 'reserva_comprobante_valido':
       prompt =

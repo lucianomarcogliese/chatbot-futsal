@@ -108,10 +108,11 @@ async function handleProductoSeleccionado(from, input) {
   const oferta = await generateResponse('reserva_oferta', { nombre: producto.nombre }, input);
   await sendTextMessage(from, oferta);
 
-  // Transicionar a estado de reserva
+  // Transicionar a estado de reserva (guardar talles para consultas de precio)
   conversationState[from] = {
     esperandoRespuestaReserva: true,
     productoReserva: producto.nombre,
+    productoTalles: producto.talles,
     catalogo,
     ...(lastDni ? { lastDni } : {}),
   };
@@ -167,16 +168,16 @@ async function handleRespuestaReserva(from, body) {
 
 async function handleNombreReserva(from, body) {
   const nombre = body.trim();
-  const { productoReserva, catalogo, lastDni } = conversationState[from];
-  conversationState[from] = { esperandoApellidoReserva: true, nombre, productoReserva, catalogo, ...(lastDni ? { lastDni } : {}) };
+  const { productoReserva, productoTalles, catalogo, lastDni } = conversationState[from];
+  conversationState[from] = { esperandoApellidoReserva: true, nombre, productoReserva, productoTalles, catalogo, ...(lastDni ? { lastDni } : {}) };
   const msg = await generateResponse('reserva_pedir_apellido', { nombre }, body);
   return sendTextMessage(from, msg);
 }
 
 async function handleApellidoReserva(from, body) {
   const apellido = body.trim();
-  const { nombre, productoReserva, catalogo, lastDni } = conversationState[from];
-  conversationState[from] = { esperandoCelularReserva: true, nombre, apellido, productoReserva, catalogo, ...(lastDni ? { lastDni } : {}) };
+  const { nombre, productoReserva, productoTalles, catalogo, lastDni } = conversationState[from];
+  conversationState[from] = { esperandoCelularReserva: true, nombre, apellido, productoReserva, productoTalles, catalogo, ...(lastDni ? { lastDni } : {}) };
   const msg = await generateResponse('reserva_pedir_celular', { nombre, apellido }, body);
   return sendTextMessage(from, msg);
 }
@@ -188,19 +189,27 @@ async function handleCelularReserva(from, body) {
     return sendTextMessage(from, msg);
   }
 
-  const { nombre, apellido, productoReserva, lastDni } = conversationState[from];
+  const { nombre, apellido, productoReserva, productoTalles, lastDni } = conversationState[from];
   const fecha = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
 
   await guardarReserva({ nombre, apellido, celular, producto: productoReserva, fecha, estado: 'Pendiente', comprobanteUrl: '' });
 
-  conversationState[from] = { esperandoComprobante: true, nombre, apellido, celular, productoReserva, ...(lastDni ? { lastDni } : {}) };
+  conversationState[from] = { esperandoComprobante: true, nombre, apellido, celular, productoReserva, productoTalles, ...(lastDni ? { lastDni } : {}) };
 
-  const msg = await generateResponse('reserva_instrucciones_pago', { nombre, producto: productoReserva }, body);
+  const msg = await generateResponse('reserva_instrucciones_pago', { nombre, producto: productoReserva, talles: productoTalles }, body);
   return sendTextMessage(from, msg);
 }
 
+const PRECIO_QUERY = /\b(cu[aá]nto|precio|cuesta|sale|monto|importe|valor|cuanto\s+es|cuanto\s+sale)\b/i;
+
 async function handleComprobante(from, body, media = {}) {
-  const { nombre, apellido, celular, productoReserva, lastDni } = conversationState[from];
+  const { nombre, apellido, celular, productoReserva, productoTalles, lastDni } = conversationState[from];
+
+  // Usuario pregunta el precio
+  if (PRECIO_QUERY.test(body) && productoTalles?.length) {
+    const msg = await generateResponse('reserva_instrucciones_pago', { nombre, producto: productoReserva, talles: productoTalles }, body);
+    return sendTextMessage(from, msg);
+  }
 
   // Usuario elige efectivo
   if (EFECTIVO_REGEX.test(body.trim().toLowerCase())) {
