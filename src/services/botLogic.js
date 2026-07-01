@@ -75,14 +75,18 @@ async function handleProductoSeleccionado(from, input) {
       .filter((w) => w.length > 2 && !STOPWORDS.has(w));
     if (palabras.length) {
       producto = catalogo.find((p) =>
-        palabras.some((w) => p.nombre.toLowerCase().includes(w))
+        palabras.some((w) => {
+          const nombre = p.nombre.toLowerCase();
+          return nombre.includes(w) || (w.endsWith('s') && nombre.includes(w.slice(0, -1)));
+        })
       );
     }
   }
 
   if (!producto) {
     const intent = detectIntent(input.trim().toLowerCase());
-    if (intent !== 'desconocido') {
+    // No re-despachar 'stock': el usuario ya está en modo catálogo
+    if (intent !== 'desconocido' && intent !== 'stock') {
       const { lastDni } = conversationState[from];
       conversationState[from] = lastDni ? { lastDni } : {};
       return await dispatchIntent(from, intent, input);
@@ -122,7 +126,7 @@ async function handleProductoSeleccionado(from, input) {
 
 async function handleRespuestaReserva(from, body) {
   const text = body.trim().toLowerCase();
-  const { catalogo, productoReserva, lastDni } = conversationState[from];
+  const { catalogo, productoReserva, productoTalles, lastDni } = conversationState[from];
 
   // Confirmación → pedir talle
   if (CONFIRMACION_RESERVA.test(text)) {
