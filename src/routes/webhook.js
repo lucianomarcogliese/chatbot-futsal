@@ -6,14 +6,17 @@ const { handleIncomingMessage } = require('../services/botLogic');
 router.post('/', (req, res) => {
   res.status(200).end(); // Twilio queda satisfecho de inmediato (sin body para que no lo reenvíe)
 
-  const from = req.body.From;
-  const body = req.body.Body;
+  const from      = req.body.From;
+  const body      = req.body.Body || '';
+  const numMedia  = parseInt(req.body.NumMedia || '0', 10);
+  const mediaUrl  = req.body.MediaUrl0  || null;
+  const mediaType = req.body.MediaContentType0 || null;
 
-  if (!from || !body) return;
+  if (!from) return;
 
-  console.log(`[webhook] Mensaje recibido de ${from}: "${body}"`);
+  console.log(`[webhook] Mensaje de ${from}: "${body}" | media=${numMedia}`);
 
-  handleIncomingMessage(from, body)
+  handleIncomingMessage(from, body, { numMedia, mediaUrl, mediaType })
     .catch((err) => console.error('[webhook] Error no manejado en handleIncomingMessage:', err));
 });
 

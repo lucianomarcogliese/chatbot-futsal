@@ -10,15 +10,10 @@ const SYSTEM_PROMPT =
   'Nunca das instrucciones tipo "escribí X para consultar Y". ' +
   'En vez de listar comandos, contás lo que podés hacer y preguntás qué le interesa.';
 
-function callClaude(prompt) {
-  return new Promise((resolve, reject) => {
-    const body = JSON.stringify({
-      model: 'claude-haiku-4-5',
-      max_tokens: 300,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: prompt }],
-    });
+// ─── HTTP helper genérico hacia la API de Anthropic ──────────────────────────
 
+function callAnthropicApi(bodyStr) {
+  return new Promise((resolve, reject) => {
     const options = {
       hostname: 'api.anthropic.com',
       path: '/v1/messages',
@@ -27,7 +22,7 @@ function callClaude(prompt) {
         'Content-Type': 'application/json',
         'x-api-key': process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
-        'Content-Length': Buffer.byteLength(body),
+        'Content-Length': Buffer.byteLength(bodyStr),
       },
     };
 
@@ -46,10 +41,83 @@ function callClaude(prompt) {
     });
 
     req.on('error', reject);
-    req.write(body);
+    req.write(bodyStr);
     req.end();
   });
 }
+
+function callClaude(prompt) {
+  const body = JSON.stringify({
+    model: 'claude-haiku-4-5',
+    max_tokens: 300,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: prompt }],
+  });
+  return callAnthropicApi(body);
+}
+
+// ─── Descarga media de Twilio (sigue redirección al CDN) ─────────────────────
+
+function downloadTwilioMedia(url) {
+  return new Promise((resolve, reject) => {
+    const auth = Buffer.from(
+      `${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`
+    ).toString('base64');
+
+    function fetchUrl(targetUrl, withAuth) {
+      const parsed = new URL(targetUrl);
+      const options = {
+        hostname: parsed.hostname,
+        path: parsed.pathname + (parsed.search || ''),
+        method: 'GET',
+        headers: withAuth ? { Authorization: `Basic ${auth}` } : {},
+      };
+      const req = https.request(options, (res) => {
+        if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
+          fetchUrl(res.headers.location, false);
+          return;
+        }
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => resolve(Buffer.concat(chunks).toString('base64')));
+      });
+      req.on('error', reject);
+      req.end();
+    }
+
+    fetchUrl(url, true);
+  });
+}
+
+// ─── Validación de comprobante con Claude vision ──────────────────────────────
+
+async function validateComprobante(mediaUrl) {
+  const imageBase64 = await downloadTwilioMedia(mediaUrl);
+
+  const body = JSON.stringify({
+    model: 'claude-haiku-4-5',
+    max_tokens: 80,
+    messages: [{
+      role: 'user',
+      content: [
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 },
+        },
+        {
+          type: 'text',
+          text: '¿Esta imagen es un comprobante válido de transferencia bancaria (captura de pago, recibo de CBU, alias, CVU, billetera virtual)? ' +
+                'Respondé únicamente VALIDO o INVALIDO.',
+        },
+      ],
+    }],
+  });
+
+  const result = await callAnthropicApi(body);
+  return result.toUpperCase().startsWith('VALIDO');
+}
+
+// ─── Generación de respuestas de texto ───────────────────────────────────────
 
 async function generateResponse(intent, data, userMessage) {
   let prompt;
@@ -183,6 +251,81 @@ async function generateResponse(intent, data, userMessage) {
         'o los partidos (ej: "partidos", "fixture"). Sé amigable.';
       break;
 
+    // ── Reservas ──────────────────────────────────────────────────────────────
+
+    case 'reserva_oferta':
+      prompt =
+        `El usuario acaba de ver los detalles del producto "${data.nombre}". ` +
+        'Preguntale de forma natural y entusiasta si quiere reservarlo. Máximo 2 líneas.';
+      break;
+
+    case 'reserva_pedir_nombre':
+      prompt =
+        `El usuario quiere reservar "${data.producto}". ` +
+        'Pedile su nombre de pila de forma amigable para registrar la reserva.';
+      break;
+
+    case 'reserva_pedir_apellido':
+      prompt =
+        `El usuario se llama ${data.nombre} y quiere reservar indumentaria. ` +
+        'Pedile el apellido de forma natural para completar el registro.';
+      break;
+
+    case 'reserva_pedir_celular':
+      prompt =
+        `El usuario se llama ${data.nombre} ${data.apellido}. ` +
+        'Pedile su número de celular (con código de área) para poder contactarlo si es necesario.';
+      break;
+
+    case 'reserva_celular_invalido':
+      prompt =
+        `El usuario ingresó "${userMessage}" como número de celular pero no parece válido. ` +
+        'Pedile amigablemente que ingrese su número de celular con código de área (ej: 11 XXXX-XXXX).';
+      break;
+
+    case 'reserva_instrucciones_pago':
+      prompt =
+        `El usuario ${data.nombre} reservó el producto "${data.producto}". La reserva quedó registrada. ` +
+        'Explicale las opciones de pago:\n' +
+        '1. Transferencia bancaria al alias *VILTER.2026* — pedile que mande el comprobante por acá cuando esté.\n' +
+        '2. En efectivo, comunicándose al *1130350702* para coordinar.\n' +
+        'Para el retiro del producto también puede comunicarse a ese número. Sé amigable y transmití entusiasmo.';
+      break;
+
+    case 'reserva_comprobante_valido':
+      prompt =
+        `El usuario ${data.nombre} mandó el comprobante de pago para "${data.producto}" y fue validado correctamente. ` +
+        'Confirmale que el pago fue recibido y que pronto lo van a contactar para coordinar el retiro. ' +
+        'Sé amigable y entusiasta.';
+      break;
+
+    case 'reserva_comprobante_invalido':
+      prompt =
+        'El usuario mandó una imagen pero no se pudo validar como comprobante de transferencia bancaria. ' +
+        'Pedile amigablemente que reenvíe el comprobante. ' +
+        'Puede ser una captura del home banking, billetera virtual o app del banco.';
+      break;
+
+    case 'reserva_comprobante_recordatorio':
+      prompt =
+        `El usuario ${data.nombre} tiene una reserva con pago pendiente. ` +
+        'Recordale que puede mandar el comprobante de la transferencia al alias *VILTER.2026* por acá, ' +
+        'o avisar si prefiere pagar en efectivo (coordinando con el *1130350702*).';
+      break;
+
+    case 'reserva_efectivo_ok':
+      prompt =
+        `El usuario ${data.nombre} eligió pagar en efectivo por "${data.producto}". ` +
+        'Confirmale que su reserva quedó anotada y que para coordinar el retiro y el pago ' +
+        'se comunique al *1130350702*. Sé amigable.';
+      break;
+
+    case 'reserva_rechazada':
+      prompt =
+        'El usuario no quiere reservar en este momento. ' +
+        'Avisale que no hay problema y que puede seguir viendo otros productos o consultar lo que necesite.';
+      break;
+
     default:
       prompt =
         `El usuario escribió: "${userMessage}". ` +
@@ -192,4 +335,4 @@ async function generateResponse(intent, data, userMessage) {
   return callClaude(prompt);
 }
 
-module.exports = { generateResponse };
+module.exports = { generateResponse, validateComprobante };

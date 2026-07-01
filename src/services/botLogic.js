@@ -1,10 +1,13 @@
 'use strict';
-const { getStock, getCuotasPendientes, getProximosPartidos } = require('./sheets');
+const { getStock, getCuotasPendientes, getProximosPartidos, guardarReserva, registrarPago } = require('./sheets');
 const { sendTextMessage, sendMediaMessage } = require('./twilio');
-const { generateResponse } = require('./ai');
+const { generateResponse, validateComprobante } = require('./ai');
 
 const ERROR_MSG = 'Ocurrió un error, por favor intentá de nuevo en unos minutos.';
 const DNI_REGEX = /^\d{7,8}$/;
+const CONFIRMACION_RESERVA = /\b(s[ií]|dale|quiero|reserv[ao]|confirmo|sip|va|obvio)\b/i;
+const RECHAZO_RESERVA = /\b(no|nel|nop)\b/i;
+const EFECTIVO_REGEX = /\b(efectivo|cash|en\s+mano)\b/i;
 
 const conversationState = {};
 
@@ -19,6 +22,8 @@ function detectIntent(text) {
   return 'desconocido';
 }
 
+// ─── Stock ───────────────────────────────────────────────────────────────────
+
 async function handleStock(from, userMessage) {
   const items = await getStock();
 
@@ -27,7 +32,6 @@ async function handleStock(from, userMessage) {
     return sendTextMessage(from, text);
   }
 
-  // Agrupar por producto
   const porProducto = new Map();
   for (const item of items) {
     if (!porProducto.has(item.producto)) {
@@ -45,7 +49,6 @@ async function handleStock(from, userMessage) {
     talles: data.talles,
   }));
 
-  // Guardar estado esperando selección de producto
   conversationState[from] = { ...conversationState[from], esperandoProducto: true, catalogo };
 
   const text = await generateResponse('stock_lista', catalogo, userMessage);
@@ -78,21 +81,17 @@ async function handleProductoSeleccionado(from, input) {
   }
 
   if (!producto) {
-    // Si el usuario cambió de tema, salir del modo stock y dispatch al intent correcto
     const intent = detectIntent(input.trim().toLowerCase());
     if (intent !== 'desconocido') {
       const { lastDni } = conversationState[from];
       conversationState[from] = lastDni ? { lastDni } : {};
       return await dispatchIntent(from, intent, input);
     }
-    // Sin match → seguir en modo stock y pedir que reintente
     const msg = await generateResponse('stock_no_encontrado', catalogo, input);
     return sendTextMessage(from, msg);
   }
 
-  // Mantener estado de stock activo para follow-up questions
   const { lastDni } = conversationState[from];
-  conversationState[from] = { esperandoProducto: true, catalogo, ...(lastDni ? { lastDni } : {}) };
 
   const lineas = producto.talles
     .map((t) => `• Talle ${t.talle} — ${t.cantidad} uds — $${t.precio}`)
@@ -100,10 +99,143 @@ async function handleProductoSeleccionado(from, input) {
   const caption = `👕 *${producto.nombre}*\n${lineas}`;
 
   if (producto.imagenUrl) {
-    return sendMediaMessage(from, producto.imagenUrl, caption);
+    await sendMediaMessage(from, producto.imagenUrl, caption);
+  } else {
+    await sendTextMessage(from, caption);
   }
-  return sendTextMessage(from, caption);
+
+  // Ofrecer reserva
+  const oferta = await generateResponse('reserva_oferta', { nombre: producto.nombre }, input);
+  await sendTextMessage(from, oferta);
+
+  // Transicionar a estado de reserva
+  conversationState[from] = {
+    esperandoRespuestaReserva: true,
+    productoReserva: producto.nombre,
+    catalogo,
+    ...(lastDni ? { lastDni } : {}),
+  };
 }
+
+// ─── Flujo de reserva ─────────────────────────────────────────────────────────
+
+async function handleRespuestaReserva(from, body) {
+  const text = body.trim().toLowerCase();
+  const { catalogo, productoReserva, lastDni } = conversationState[from];
+
+  // Confirmación → pedir nombre
+  if (CONFIRMACION_RESERVA.test(text)) {
+    conversationState[from] = { esperandoNombreReserva: true, productoReserva, catalogo, ...(lastDni ? { lastDni } : {}) };
+    const msg = await generateResponse('reserva_pedir_nombre', { producto: productoReserva }, body);
+    return sendTextMessage(from, msg);
+  }
+
+  // Intentar match con otro producto del catálogo
+  const numero = parseInt(text.trim(), 10);
+  let otroProd = !isNaN(numero) ? catalogo.find((p) => p.numero === numero) : null;
+  if (!otroProd) {
+    const STOPWORDS = new Set(['que', 'de', 'la', 'el', 'los', 'las', 'un', 'una', 'me', 'ver', 'quiero', 'del']);
+    const palabras = text.split(/\W+/).filter((w) => w.length > 2 && !STOPWORDS.has(w));
+    if (palabras.length) {
+      otroProd = catalogo.find((p) => palabras.some((w) => p.nombre.toLowerCase().includes(w)));
+    }
+  }
+  if (otroProd) {
+    // Mostrar el otro producto y preguntar de nuevo
+    conversationState[from] = { esperandoProducto: true, catalogo, ...(lastDni ? { lastDni } : {}) };
+    return await handleProductoSeleccionado(from, body);
+  }
+
+  // Rechazo → volver a ver productos
+  if (RECHAZO_RESERVA.test(text)) {
+    conversationState[from] = { esperandoProducto: true, catalogo, ...(lastDni ? { lastDni } : {}) };
+    const msg = await generateResponse('reserva_rechazada', null, body);
+    return sendTextMessage(from, msg);
+  }
+
+  // Intent conocido → salir del modo stock
+  const intent = detectIntent(text);
+  if (intent !== 'desconocido' && intent !== 'cierre') {
+    conversationState[from] = lastDni ? { lastDni } : {};
+    return await dispatchIntent(from, intent, body);
+  }
+
+  // Respuesta ambigua → re-preguntar
+  const msg = await generateResponse('reserva_oferta', { nombre: productoReserva }, body);
+  return sendTextMessage(from, msg);
+}
+
+async function handleNombreReserva(from, body) {
+  const nombre = body.trim();
+  const { productoReserva, catalogo, lastDni } = conversationState[from];
+  conversationState[from] = { esperandoApellidoReserva: true, nombre, productoReserva, catalogo, ...(lastDni ? { lastDni } : {}) };
+  const msg = await generateResponse('reserva_pedir_apellido', { nombre }, body);
+  return sendTextMessage(from, msg);
+}
+
+async function handleApellidoReserva(from, body) {
+  const apellido = body.trim();
+  const { nombre, productoReserva, catalogo, lastDni } = conversationState[from];
+  conversationState[from] = { esperandoCelularReserva: true, nombre, apellido, productoReserva, catalogo, ...(lastDni ? { lastDni } : {}) };
+  const msg = await generateResponse('reserva_pedir_celular', { nombre, apellido }, body);
+  return sendTextMessage(from, msg);
+}
+
+async function handleCelularReserva(from, body) {
+  const celular = body.trim().replace(/[\s\-().]/g, '');
+  if (!/\d{8,}/.test(celular)) {
+    const msg = await generateResponse('reserva_celular_invalido', null, body);
+    return sendTextMessage(from, msg);
+  }
+
+  const { nombre, apellido, productoReserva, lastDni } = conversationState[from];
+  const fecha = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
+
+  await guardarReserva({ nombre, apellido, celular, producto: productoReserva, fecha, estado: 'Pendiente', comprobanteUrl: '' });
+
+  conversationState[from] = { esperandoComprobante: true, nombre, apellido, celular, productoReserva, ...(lastDni ? { lastDni } : {}) };
+
+  const msg = await generateResponse('reserva_instrucciones_pago', { nombre, producto: productoReserva }, body);
+  return sendTextMessage(from, msg);
+}
+
+async function handleComprobante(from, body, media = {}) {
+  const { nombre, apellido, celular, productoReserva, lastDni } = conversationState[from];
+
+  // Usuario elige efectivo
+  if (EFECTIVO_REGEX.test(body.trim().toLowerCase())) {
+    await registrarPago(celular, '', 'Efectivo - pendiente');
+    conversationState[from] = lastDni ? { lastDni } : {};
+    const msg = await generateResponse('reserva_efectivo_ok', { nombre, producto: productoReserva }, body);
+    return sendTextMessage(from, msg);
+  }
+
+  // Usuario manda imagen
+  if (media.numMedia > 0 && media.mediaUrl) {
+    try {
+      const valido = await validateComprobante(media.mediaUrl);
+      if (valido) {
+        await registrarPago(celular, media.mediaUrl, 'Pagado - transferencia');
+        conversationState[from] = lastDni ? { lastDni } : {};
+        const msg = await generateResponse('reserva_comprobante_valido', { nombre, producto: productoReserva }, body);
+        return sendTextMessage(from, msg);
+      } else {
+        const msg = await generateResponse('reserva_comprobante_invalido', null, body);
+        return sendTextMessage(from, msg);
+      }
+    } catch (err) {
+      console.error('[botLogic] Error validando comprobante:', err.message);
+      const msg = await generateResponse('reserva_comprobante_invalido', null, body);
+      return sendTextMessage(from, msg);
+    }
+  }
+
+  // Sin imagen ni "efectivo" → recordatorio
+  const msg = await generateResponse('reserva_comprobante_recordatorio', { nombre }, body);
+  return sendTextMessage(from, msg);
+}
+
+// ─── Cuotas ───────────────────────────────────────────────────────────────────
 
 async function handleCuotasConDNI(from, dni) {
   const resultado = await getCuotasPendientes(dni);
@@ -111,6 +243,8 @@ async function handleCuotasConDNI(from, dni) {
   const text = await generateResponse('cuotas', resultado, dni);
   return sendTextMessage(from, text);
 }
+
+// ─── Partidos ─────────────────────────────────────────────────────────────────
 
 function groupByJornada(partidos, maxJornadas = 3) {
   const map = new Map();
@@ -141,6 +275,8 @@ async function handlePago(from, userMessage) {
   return sendTextMessage(from, text);
 }
 
+// ─── Dispatch ─────────────────────────────────────────────────────────────────
+
 async function dispatchIntent(from, intent, body) {
   if (intent === 'saludo') {
     const msg = await generateResponse('menu', null, body);
@@ -170,30 +306,41 @@ async function dispatchIntent(from, intent, body) {
   return sendTextMessage(from, msg);
 }
 
-async function handleIncomingMessage(from, body) {
+// ─── Entry point ──────────────────────────────────────────────────────────────
+
+async function handleIncomingMessage(from, body, media = {}) {
   const text = body.trim().toLowerCase();
 
   try {
+    // Estados de reserva (mayor precedencia)
+    if (conversationState[from]?.esperandoComprobante)      { console.log(`[botLogic] ${from} estado=esperandoComprobante`);     return await handleComprobante(from, body, media); }
+    if (conversationState[from]?.esperandoCelularReserva)   { console.log(`[botLogic] ${from} estado=esperandoCelularReserva`);  return await handleCelularReserva(from, body); }
+    if (conversationState[from]?.esperandoApellidoReserva)  { console.log(`[botLogic] ${from} estado=esperandoApellidoReserva`); return await handleApellidoReserva(from, body); }
+    if (conversationState[from]?.esperandoNombreReserva)    { console.log(`[botLogic] ${from} estado=esperandoNombreReserva`);   return await handleNombreReserva(from, body); }
+    if (conversationState[from]?.esperandoRespuestaReserva) { console.log(`[botLogic] ${from} estado=esperandoRespuestaReserva`); return await handleRespuestaReserva(from, body); }
+
+    // Estado de selección de producto
     if (conversationState[from]?.esperandoProducto) {
-      console.log(`[botLogic] from=${from} estado=esperandoProducto input="${body}"`);
+      console.log(`[botLogic] ${from} estado=esperandoProducto input="${body}"`);
       return await handleProductoSeleccionado(from, body);
     }
 
+    // Estado de DNI
     if (conversationState[from]?.esperandoDNI) {
       const dni = body.trim();
       if (!DNI_REGEX.test(dni)) {
-        console.log(`[botLogic] from=${from} estado=esperandoDNI input_invalido="${dni}"`);
+        console.log(`[botLogic] ${from} estado=esperandoDNI input_invalido="${dni}"`);
         const msg = await generateResponse('pedir_dni_invalido', null, body);
         return sendTextMessage(from, msg);
       }
-      console.log(`[botLogic] from=${from} estado=esperandoDNI dni="${dni}"`);
+      console.log(`[botLogic] ${from} estado=esperandoDNI dni="${dni}"`);
       return await handleCuotasConDNI(from, dni);
     }
 
     const intent = detectIntent(text);
-    console.log(`[botLogic] from=${from} intent=${intent} body="${body}"`);
-
+    console.log(`[botLogic] ${from} intent=${intent} body="${body}"`);
     return await dispatchIntent(from, intent, body);
+
   } catch (err) {
     console.error('[botLogic] Error no controlado:', err.message);
     delete conversationState[from];

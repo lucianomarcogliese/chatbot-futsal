@@ -6,7 +6,7 @@ function getAuth() {
   return new google.auth.JWT({
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
 }
 
@@ -166,4 +166,59 @@ async function getProximosPartidos(cantidad = 3) {
   }
 }
 
-module.exports = { getStock, getCuotasPendientes, getProximosPartidos };
+// ─── Escritura ────────────────────────────────────────────────────────────────
+
+async function appendToSheet(tab, values) {
+  const sheets = getSheetsClient();
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+    range: `${tab}!A1`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [values] },
+  });
+}
+
+/**
+ * Guarda una reserva en la pestaña "Reservas".
+ * @param {{ nombre, apellido, celular, producto, fecha, estado, comprobanteUrl }} reserva
+ */
+async function guardarReserva(reserva) {
+  await appendToSheet('Reservas', [
+    reserva.nombre,
+    reserva.apellido,
+    reserva.celular,
+    reserva.producto,
+    reserva.fecha,
+    reserva.estado,
+    reserva.comprobanteUrl || '',
+  ]);
+}
+
+/**
+ * Actualiza el estado de pago de una reserva buscando por celular.
+ */
+async function registrarPago(celular, comprobanteUrl, estado) {
+  try {
+    // Leer sin cache para obtener datos frescos
+    delete cache['Reservas!A:G'];
+    const rows = await readSheet('Reservas', 'A:G');
+    const idx = rows.findIndex((r) => r.Celular === celular);
+    if (idx === -1) {
+      console.error('[sheets] registrarPago: celular no encontrado:', celular);
+      return;
+    }
+    const rowNumber = idx + 2; // +1 por header, +1 por base-1
+    const sheets = getSheetsClient();
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: `Reservas!F${rowNumber}:G${rowNumber}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[estado, comprobanteUrl]] },
+    });
+  } catch (err) {
+    console.error('[sheets] Error en registrarPago:', err.message);
+    throw err;
+  }
+}
+
+module.exports = { getStock, getCuotasPendientes, getProximosPartidos, guardarReserva, registrarPago };
