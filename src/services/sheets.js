@@ -180,7 +180,7 @@ async function appendToSheet(tab, values) {
 
 /**
  * Guarda una reserva en la pestaña "Reservas".
- * @param {{ nombre, apellido, celular, producto, fecha, estado, comprobanteUrl }} reserva
+ * Columnas: Nombre|Apellido|Celular|Producto|Talle|Fecha|Estado|ComprobanteUrl
  */
 async function guardarReserva(reserva) {
   await appendToSheet('Reservas', [
@@ -188,6 +188,7 @@ async function guardarReserva(reserva) {
     reserva.apellido,
     reserva.celular,
     reserva.producto,
+    reserva.talle || '',
     reserva.fecha,
     reserva.estado,
     reserva.comprobanteUrl || '',
@@ -196,22 +197,22 @@ async function guardarReserva(reserva) {
 
 /**
  * Actualiza el estado de pago de una reserva buscando por celular.
+ * Estado en col G, ComprobanteUrl en col H (con columna Talle en E).
  */
 async function registrarPago(celular, comprobanteUrl, estado) {
   try {
-    // Leer sin cache para obtener datos frescos
-    delete cache['Reservas!A:G'];
-    const rows = await readSheet('Reservas', 'A:G');
+    delete cache['Reservas!A:H'];
+    const rows = await readSheet('Reservas', 'A:H');
     const idx = rows.findIndex((r) => r.Celular === celular);
     if (idx === -1) {
       console.error('[sheets] registrarPago: celular no encontrado:', celular);
       return;
     }
-    const rowNumber = idx + 2; // +1 por header, +1 por base-1
+    const rowNumber = idx + 2;
     const sheets = getSheetsClient();
     await sheets.spreadsheets.values.update({
       spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-      range: `Reservas!F${rowNumber}:G${rowNumber}`,
+      range: `Reservas!G${rowNumber}:H${rowNumber}`,
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [[estado, comprobanteUrl]] },
     });
@@ -221,4 +222,33 @@ async function registrarPago(celular, comprobanteUrl, estado) {
   }
 }
 
-module.exports = { getStock, getCuotasPendientes, getProximosPartidos, guardarReserva, registrarPago };
+/**
+ * Decrementa en 1 la cantidad del producto+talle en la pestaña "Stock".
+ */
+async function decrementarStock(producto, talle) {
+  try {
+    delete cache['Stock!A:E'];
+    const rows = await readSheet('Stock', 'A:E');
+    const idx = rows.findIndex(
+      (r) => r.Producto === producto && r.Talle === talle
+    );
+    if (idx === -1) throw new Error(`Stock no encontrado: ${producto} talle ${talle}`);
+    const actual = parseInt(rows[idx].Cantidad, 10);
+    if (actual <= 0) throw new Error(`Sin stock disponible: ${producto} talle ${talle}`);
+    const rowNumber = idx + 2;
+    const sheets = getSheetsClient();
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: `Stock!C${rowNumber}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[actual - 1]] },
+    });
+    delete cache['Stock!A:E'];
+    console.log(`[sheets] Stock decrementado: ${producto} talle ${talle} → ${actual - 1}`);
+  } catch (err) {
+    console.error('[sheets] Error en decrementarStock:', err.message);
+    throw err;
+  }
+}
+
+module.exports = { getStock, getCuotasPendientes, getProximosPartidos, guardarReserva, registrarPago, decrementarStock };

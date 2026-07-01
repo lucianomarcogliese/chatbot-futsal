@@ -253,6 +253,29 @@ async function generateResponse(intent, data, userMessage) {
 
     // ── Reservas ──────────────────────────────────────────────────────────────
 
+    case 'reserva_pedir_talle': {
+      const tallesDisponibles = data.talles
+        .filter((t) => t.cantidad > 0)
+        .map((t) => `• ${t.talle}`)
+        .join('\n');
+      prompt =
+        `El usuario quiere reservar "${data.producto}". ` +
+        `Los talles disponibles son:\n${tallesDisponibles}\n\n` +
+        'Preguntale qué talle necesita de forma natural y amigable.';
+      break;
+    }
+
+    case 'reserva_talle_invalido': {
+      const opciones = data.talles
+        .filter((t) => t.cantidad > 0)
+        .map((t) => t.talle)
+        .join(', ');
+      prompt =
+        `El usuario ingresó "${userMessage}" como talle pero no coincide con los disponibles (${opciones}). ` +
+        'Pedile amigablemente que elija uno de los talles disponibles.';
+      break;
+    }
+
     case 'reserva_oferta':
       prompt =
         `El usuario acaba de ver los detalles del producto "${data.nombre}". ` +

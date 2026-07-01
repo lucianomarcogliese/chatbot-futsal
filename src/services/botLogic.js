@@ -1,5 +1,5 @@
 'use strict';
-const { getStock, getCuotasPendientes, getProximosPartidos, guardarReserva, registrarPago } = require('./sheets');
+const { getStock, getCuotasPendientes, getProximosPartidos, guardarReserva, registrarPago, decrementarStock } = require('./sheets');
 const { sendTextMessage, sendMediaMessage } = require('./twilio');
 const { generateResponse, validateComprobante } = require('./ai');
 
@@ -124,10 +124,10 @@ async function handleRespuestaReserva(from, body) {
   const text = body.trim().toLowerCase();
   const { catalogo, productoReserva, lastDni } = conversationState[from];
 
-  // Confirmación → pedir nombre
+  // Confirmación → pedir talle
   if (CONFIRMACION_RESERVA.test(text)) {
-    conversationState[from] = { esperandoNombreReserva: true, productoReserva, catalogo, ...(lastDni ? { lastDni } : {}) };
-    const msg = await generateResponse('reserva_pedir_nombre', { producto: productoReserva }, body);
+    conversationState[from] = { esperandoTalleReserva: true, productoReserva, productoTalles, catalogo, ...(lastDni ? { lastDni } : {}) };
+    const msg = await generateResponse('reserva_pedir_talle', { producto: productoReserva, talles: productoTalles }, body);
     return sendTextMessage(from, msg);
   }
 
@@ -166,18 +166,38 @@ async function handleRespuestaReserva(from, body) {
   return sendTextMessage(from, msg);
 }
 
+async function handleTalleReserva(from, body) {
+  const { productoReserva, productoTalles, catalogo, lastDni } = conversationState[from];
+  const input = body.trim().toUpperCase();
+  const talleElegido = productoTalles.find(
+    (t) => t.talle.toUpperCase() === input && t.cantidad > 0
+  );
+  if (!talleElegido) {
+    const msg = await generateResponse('reserva_talle_invalido', { talles: productoTalles }, body);
+    return sendTextMessage(from, msg);
+  }
+  conversationState[from] = {
+    esperandoNombreReserva: true,
+    talleReserva: talleElegido.talle,
+    productoReserva, productoTalles, catalogo,
+    ...(lastDni ? { lastDni } : {}),
+  };
+  const msg = await generateResponse('reserva_pedir_nombre', { producto: productoReserva }, body);
+  return sendTextMessage(from, msg);
+}
+
 async function handleNombreReserva(from, body) {
   const nombre = body.trim();
-  const { productoReserva, productoTalles, catalogo, lastDni } = conversationState[from];
-  conversationState[from] = { esperandoApellidoReserva: true, nombre, productoReserva, productoTalles, catalogo, ...(lastDni ? { lastDni } : {}) };
+  const { productoReserva, productoTalles, talleReserva, catalogo, lastDni } = conversationState[from];
+  conversationState[from] = { esperandoApellidoReserva: true, nombre, talleReserva, productoReserva, productoTalles, catalogo, ...(lastDni ? { lastDni } : {}) };
   const msg = await generateResponse('reserva_pedir_apellido', { nombre }, body);
   return sendTextMessage(from, msg);
 }
 
 async function handleApellidoReserva(from, body) {
   const apellido = body.trim();
-  const { nombre, productoReserva, productoTalles, catalogo, lastDni } = conversationState[from];
-  conversationState[from] = { esperandoCelularReserva: true, nombre, apellido, productoReserva, productoTalles, catalogo, ...(lastDni ? { lastDni } : {}) };
+  const { nombre, talleReserva, productoReserva, productoTalles, catalogo, lastDni } = conversationState[from];
+  conversationState[from] = { esperandoCelularReserva: true, nombre, apellido, talleReserva, productoReserva, productoTalles, catalogo, ...(lastDni ? { lastDni } : {}) };
   const msg = await generateResponse('reserva_pedir_celular', { nombre, apellido }, body);
   return sendTextMessage(from, msg);
 }
@@ -189,12 +209,13 @@ async function handleCelularReserva(from, body) {
     return sendTextMessage(from, msg);
   }
 
-  const { nombre, apellido, productoReserva, productoTalles, lastDni } = conversationState[from];
+  const { nombre, apellido, talleReserva, productoReserva, productoTalles, lastDni } = conversationState[from];
   const fecha = new Date().toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
 
-  await guardarReserva({ nombre, apellido, celular, producto: productoReserva, fecha, estado: 'Pendiente', comprobanteUrl: '' });
+  await guardarReserva({ nombre, apellido, celular, producto: productoReserva, talle: talleReserva, fecha, estado: 'Pendiente', comprobanteUrl: '' });
+  await decrementarStock(productoReserva, talleReserva);
 
-  conversationState[from] = { esperandoComprobante: true, nombre, apellido, celular, productoReserva, productoTalles, ...(lastDni ? { lastDni } : {}) };
+  conversationState[from] = { esperandoComprobante: true, nombre, apellido, celular, talleReserva, productoReserva, productoTalles, ...(lastDni ? { lastDni } : {}) };
 
   const msg = await generateResponse('reserva_instrucciones_pago', { nombre, producto: productoReserva, talles: productoTalles }, body);
   return sendTextMessage(from, msg);
@@ -325,6 +346,7 @@ async function handleIncomingMessage(from, body, media = {}) {
     if (conversationState[from]?.esperandoComprobante)      { console.log(`[botLogic] ${from} estado=esperandoComprobante`);     return await handleComprobante(from, body, media); }
     if (conversationState[from]?.esperandoCelularReserva)   { console.log(`[botLogic] ${from} estado=esperandoCelularReserva`);  return await handleCelularReserva(from, body); }
     if (conversationState[from]?.esperandoApellidoReserva)  { console.log(`[botLogic] ${from} estado=esperandoApellidoReserva`); return await handleApellidoReserva(from, body); }
+    if (conversationState[from]?.esperandoTalleReserva)     { console.log(`[botLogic] ${from} estado=esperandoTalleReserva`);    return await handleTalleReserva(from, body); }
     if (conversationState[from]?.esperandoNombreReserva)    { console.log(`[botLogic] ${from} estado=esperandoNombreReserva`);   return await handleNombreReserva(from, body); }
     if (conversationState[from]?.esperandoRespuestaReserva) { console.log(`[botLogic] ${from} estado=esperandoRespuestaReserva`); return await handleRespuestaReserva(from, body); }
 
