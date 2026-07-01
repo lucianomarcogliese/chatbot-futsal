@@ -59,10 +59,22 @@ async function handleProductoSeleccionado(from, input) {
   const numero = parseInt(input.trim(), 10);
   let producto = !isNaN(numero) ? catalogo.find((p) => p.numero === numero) : null;
 
-  // Match por nombre parcial
+  // Match por nombre parcial (palabra a palabra)
   if (!producto) {
-    const lower = input.trim().toLowerCase();
-    producto = catalogo.find((p) => p.nombre.toLowerCase().includes(lower));
+    const STOPWORDS = new Set([
+      'que', 'tenes', 'tiene', 'hay', 'de', 'la', 'el', 'los', 'las',
+      'un', 'una', 'me', 'te', 'se', 'por', 'para', 'con', 'como',
+      'quiero', 'ver', 'dame', 'mostrar', 'del', 'sobre', 'info',
+      'talle', 'talles', 'precio', 'stock',
+    ]);
+    const palabras = input.trim().toLowerCase()
+      .split(/\W+/)
+      .filter((w) => w.length > 2 && !STOPWORDS.has(w));
+    if (palabras.length) {
+      producto = catalogo.find((p) =>
+        palabras.some((w) => p.nombre.toLowerCase().includes(w))
+      );
+    }
   }
 
   if (!producto) {

@@ -84,8 +84,9 @@ async function generateResponse(intent, data, userMessage) {
       const lista = data.map((p) => `${p.numero}. ${p.nombre}`).join('\n');
       prompt =
         `El usuario preguntó por stock de indumentaria. Los productos disponibles son:\n${lista}\n\n` +
-        'Presentá el listado de forma atractiva y preguntale de forma natural cuál le interesa. ' +
-        'No des instrucciones de comandos. Algo como "¿alguno te llama la atención?" ' +
+        'Presentá el listado de forma atractiva MANTENIENDO exactamente la numeración original de cada producto. ' +
+        'Los números son importantes, no los quites ni los reorganices en categorías. ' +
+        'Preguntale de forma natural cuál le interesa, algo como "¿alguno te llama la atención?" ' +
         'o "decime cuál querés ver y te mando los detalles".';
       break;
     }
