@@ -10,9 +10,11 @@ const RECHAZO_RESERVA = /\b(no|nel|nop)\b/i;
 const EFECTIVO_REGEX = /\b(efectivo|cash|en\s+mano)\b/i;
 
 const conversationState = {};
+const pendingMessages = {};
+const DEBOUNCE_MS = 1500;
 
 function detectIntent(text) {
-  if (/\b(hola|buenas|buen\s?d[ií]a|buenas\s?tardes|buenas\s?noches|hey|saludos)\b/.test(text)) return 'saludo';
+  if (/\b(hola|buenas|buen\s?d[ií]a|buenas\s?tardes|buenas\s?noches|hey|saludos|como\s+and[aá]s|c[oó]mo\s+est[aá]s|qu[eé]\s+tal|buen[ao]s\s+d[ií]as)\b/.test(text)) return 'saludo';
   if (/\b(stock|ropa|camiseta|talle|indumentaria)\b/.test(text)) return 'stock';
   if (/\b(c[oó]mo\s+(se\s+)?pag[ao]|pagar|abonar|transferencia|cbu|alias|efectivo|secretar[ií]a|medio[s]?\s+de\s+pago|forma[s]?\s+de\s+pago)\b/.test(text)) return 'pago';
   if (/\b(cu[aá]nto\s+(sale|cuesta|cobran|es|vale|son|hay\s+que\s+pagar)|valor\s+(de\s+(la\s+)?)?cuota|precio\s+(de\s+(la\s+)?)?cuota|importe|cu[aá]nto\s+es\s+la\s+cuota|valores?\s+de\s+cuota)\b/.test(text)) return 'valor_cuotas';
@@ -342,7 +344,7 @@ async function dispatchIntent(from, intent, body) {
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
-async function handleIncomingMessage(from, body, media = {}) {
+async function _processMessage(from, body, media = {}) {
   const text = body.trim().toLowerCase();
 
   try {
@@ -381,6 +383,26 @@ async function handleIncomingMessage(from, body, media = {}) {
     delete conversationState[from];
     await sendTextMessage(from, ERROR_MSG);
   }
+}
+
+async function handleIncomingMessage(from, body, media = {}) {
+  if (pendingMessages[from]) {
+    clearTimeout(pendingMessages[from].timer);
+    const combinedText = (pendingMessages[from].text + ' ' + body).trim();
+    const combinedMedia = pendingMessages[from].media.numMedia > 0
+      ? pendingMessages[from].media
+      : media;
+    pendingMessages[from].text = combinedText;
+    pendingMessages[from].media = combinedMedia;
+  } else {
+    pendingMessages[from] = { text: body, media };
+  }
+
+  pendingMessages[from].timer = setTimeout(async () => {
+    const { text, media: m } = pendingMessages[from];
+    delete pendingMessages[from];
+    await _processMessage(from, text, m);
+  }, DEBOUNCE_MS);
 }
 
 module.exports = { handleIncomingMessage };
