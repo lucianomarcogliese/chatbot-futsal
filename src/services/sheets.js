@@ -98,6 +98,14 @@ async function getStock() {
   }
 }
 
+const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+function esMesFuturo(mesStr) {
+  const idx = MESES_ES.findIndex((m) => (mesStr || '').toLowerCase().trim().startsWith(m));
+  if (idx === -1) return false;
+  return idx > new Date().getMonth();
+}
+
 /**
  * Busca cuotas pendientes de un socio por su DNI.
  * Devuelve { encontrado, nombre, cuotas, totalMonto } o { encontrado: false }.
@@ -115,7 +123,8 @@ async function getCuotasPendientes(dni) {
       (c) =>
         c.Nombre === socio.Nombre &&
         c.Apellido === socio.Apellido &&
-        c.Estado === 'Pendiente'
+        c.Estado === 'Pendiente' &&
+        !esMesFuturo(c.Mes)
     );
 
     const totalMonto = cuotasPendientes.reduce(
