@@ -159,14 +159,13 @@ async function generateResponse(intent, data, userMessage) {
       break;
     }
 
-    case 'stock_no_encontrado': {
-      const opciones = data.map((p) => `${p.numero}. ${p.nombre}`).join('\n');
+    case 'stock_no_encontrado':
       prompt =
-        `El usuario respondió "${userMessage}" pero no coincide con ningún producto del catálogo.\n` +
-        `Los productos disponibles son:\n${opciones}\n\n` +
-        'Avisale amigablemente que no entendiste y pedile que elija un número de la lista.';
+        `El usuario escribió "${userMessage}" pero no coincide con ningún producto del catálogo. ` +
+        'Avisale amigablemente que no entendiste a cuál se refiere y pedile que lo aclare ' +
+        '(puede decir el número o el nombre del producto). ' +
+        'No listes los productos de nuevo — el usuario ya los tiene visibles más arriba.';
       break;
-    }
 
     case 'cuotas':
       if (!data.encontrado) {

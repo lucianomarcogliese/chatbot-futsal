@@ -11,7 +11,7 @@ const EFECTIVO_REGEX = /\b(efectivo|cash|en\s+mano)\b/i;
 
 const conversationState = {};
 const pendingMessages = {};
-const DEBOUNCE_MS = 1500;
+const DEBOUNCE_MS = 2500;
 
 function detectIntent(text) {
   if (/\b(hola|buenas|buen\s?d[ií]a|buenas\s?tardes|buenas\s?noches|hey|saludos|como\s+and[aá]s|c[oó]mo\s+est[aá]s|qu[eé]\s+tal|buen[ao]s\s+d[ií]as)\b/.test(text)) return 'saludo';
@@ -100,7 +100,10 @@ async function handleProductoSeleccionado(from, input) {
   const { lastDni } = conversationState[from];
 
   const lineas = producto.talles
-    .map((t) => `• Talle ${t.talle} — ${t.cantidad} uds — $${t.precio}`)
+    .map((t) => {
+      const precio = String(t.precio).replace(/^\$+\s*/, '');
+      return `• Talle ${t.talle} — ${t.cantidad} uds — $${precio}`;
+    })
     .join('\n');
   const caption = `👕 *${producto.nombre}*\n${lineas}`;
 
