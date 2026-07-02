@@ -5,7 +5,7 @@ const { generateResponse, validateComprobante } = require('./ai');
 
 const ERROR_MSG = 'Ocurrió un error, por favor intentá de nuevo en unos minutos.';
 const DNI_REGEX = /^\d{7,8}$/;
-const CONFIRMACION_RESERVA = /\b(s[ií]|dale|quiero|reserv[ao]|confirmo|sip|va|obvio)\b/i;
+const CONFIRMACION_RESERVA = /\b(s[ií]|dale|quiero|reserv[ao]|confirmo|sip|va|obvio|comprar|llev[ao])\b/i;
 const RECHAZO_RESERVA = /\b(no|nel|nop)\b/i;
 const EFECTIVO_REGEX = /\b(efectivo|cash|en\s+mano)\b/i;
 
@@ -15,7 +15,7 @@ const DEBOUNCE_MS = 6000;
 
 function detectIntent(text) {
   if (/\b(hola|buenas|buen\s?d[ií]a|buenas\s?tardes|buenas\s?noches|hey|saludos|como\s+and[aá]s|c[oó]mo\s+est[aá]s|qu[eé]\s+tal|buen[ao]s\s+d[ií]as)\b/.test(text)) return 'saludo';
-  if (/\b(stock|ropa|camiseta|talle|indumentaria)\b/.test(text)) return 'stock';
+  if (/\b(stock|ropa|camiseta|talle|indumentaria|comprar|llevar)\b/.test(text)) return 'stock';
   if (/\b(c[oó]mo\s+(se\s+)?pag[ao]|pagar|abonar|transferencia|cbu|alias|efectivo|secretar[ií]a|medio[s]?\s+de\s+pago|forma[s]?\s+de\s+pago)\b/.test(text)) return 'pago';
   if (/\b(cu[aá]nto\s+(sale|cuesta|cobran|es|vale|son|hay\s+que\s+pagar)|valor\s+(de\s+(la\s+)?)?cuota|precio\s+(de\s+(la\s+)?)?cuota|importe|cu[aá]nto\s+es\s+la\s+cuota|valores?\s+de\s+cuota)\b/.test(text)) return 'valor_cuotas';
   if (/\b(cuota|cuotas|deb[eo]|deuda|pago|estado|adeud)\b/.test(text)) return 'cuotas';
