@@ -231,7 +231,8 @@ async function generateResponse(intent, data, userMessage) {
         'El usuario quiere saber cómo pagar las cuotas del club. ' +
         'Explicale que tiene dos opciones:\n' +
         '1. En efectivo en la secretaría del club, de lunes a viernes de 8:30 a 14:00 hs o de 16:30 a 20:30 hs.\n' +
-        '2. Por transferencia bancaria al CBU: 123123123123.\n' +
+        '2. Por transferencia bancaria al CBU: 0140054001515101196615. ' +
+        'Una vez hecha la transferencia, tiene que enviar el comprobante a Mónica al *+54 9 11 3652-3199*.\n' +
         'Presentá la información de forma clara y amigable para WhatsApp.';
       break;
 
