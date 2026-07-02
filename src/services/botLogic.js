@@ -11,7 +11,7 @@ const EFECTIVO_REGEX = /\b(efectivo|cash|en\s+mano)\b/i;
 
 const conversationState = {};
 const pendingMessages = {};
-const DEBOUNCE_MS = 2500;
+const DEBOUNCE_MS = 6000;
 
 function detectIntent(text) {
   if (/\b(hola|buenas|buen\s?d[ií]a|buenas\s?tardes|buenas\s?noches|hey|saludos|como\s+and[aá]s|c[oó]mo\s+est[aá]s|qu[eé]\s+tal|buen[ao]s\s+d[ií]as)\b/.test(text)) return 'saludo';
